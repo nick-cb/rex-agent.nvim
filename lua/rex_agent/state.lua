@@ -6,7 +6,7 @@ local M = {}
 
 local uv = vim.uv or vim.loop
 
-local AUGROUP = "AgentBridgeState"
+local AUGROUP = "RexAgentState"
 
 local internal = {
   enabled = false,
@@ -265,9 +265,9 @@ function M.path()
     if rex_block and rex_block ~= "" then
       -- Key by $REX_BLOCK inside Rex so restarting Neovim in the same pane
       -- writes to the exact same state path already held by open agent panes.
-      internal.state_path = string.format("%s/nvim-agentbridge-rex-%s.json", base, sanitize_key(rex_block))
+      internal.state_path = string.format("%s/nvim-rex-agent-rex-%s.json", base, sanitize_key(rex_block))
     else
-      internal.state_path = string.format("%s/nvim-agentbridge-%d.json", base, vim.fn.getpid())
+      internal.state_path = string.format("%s/nvim-rex-agent-%d.json", base, vim.fn.getpid())
     end
   end
   return internal.state_path

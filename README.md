@@ -1,4 +1,4 @@
-# agentbridge.nvim
+# rex-agent.nvim
 
 Lightweight, multi-provider Neovim bridge for TUI coding agents (**Antigravity `agy`**, **Claude Code**, multi-account profiles) running in **Rex** split panes (with automatic Neovim terminal fallback outside Rex).
 
@@ -22,7 +22,7 @@ Run `:AgentHookConfig` in Neovim (or add the block below to `~/.gemini/config/ho
     "PreInvocation": [
       {
         "type": "command",
-        "command": "/usr/bin/python3 /Users/nick/workspaces/misc/agentbridge.nvim/hooks/inject_context.py --provider agy",
+        "command": "/usr/bin/python3 /Users/nick/workspaces/misc/rex-agent.nvim/hooks/inject_context.py --provider agy",
         "timeout": 3
       }
     ]
@@ -36,8 +36,9 @@ When you run `agy` outside Neovim (`NVIM_EDITOR_STATE` unset), the hook exits im
 
 ```lua
 return {
-  dir = "~/workspaces/misc/agentbridge.nvim",
-  name = "agentbridge.nvim",
+  dir = "~/workspaces/misc/rex-agent.nvim",
+  name = "rex-agent.nvim",
+  main = "rex_agent",
   opts = {
     default_provider = "agy",
     rex = {

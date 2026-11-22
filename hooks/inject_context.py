@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Shared lifecycle hook for agentbridge.nvim.
+Shared lifecycle hook for rex-agent.nvim.
 Reads live Neovim editor state from $NVIM_EDITOR_STATE and injects it as
 context for Antigravity (`agy` PreInvocation) or Claude Code (`claude` UserPromptSubmit).
 
@@ -139,7 +139,7 @@ def compute_fingerprint(state):
 def check_and_update_dedup(provider, session_id, fingerprint):
     cache_dir = tempfile.gettempdir()
     cache_path = os.path.join(
-        cache_dir, f"agentbridge-last-{safe_cache_key(provider)}-{safe_cache_key(session_id)}.hash"
+        cache_dir, f"rex-agent-last-{safe_cache_key(provider)}-{safe_cache_key(session_id)}.hash"
     )
     try:
         with open(cache_path, "r", encoding="utf-8") as fh:

@@ -66,7 +66,7 @@ function M.focus(provider_name, cfg)
 end
 
 ---@param provider_name string
----@param _provider_cfg AgentBridgeProvider
+---@param _provider_cfg RexAgentProvider
 ---@param argv_cmd string[]
 ---@param env table<string, string>
 ---@param cwd string

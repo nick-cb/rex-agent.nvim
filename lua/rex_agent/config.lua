@@ -1,4 +1,4 @@
----@class AgentBridgeProvider
+---@class RexAgentProvider
 ---@field cmd string[] Base command argv (e.g. { "agy" } or { "claude" })
 ---@field label string Display label for Rex pane / UI
 ---@field extends? string Optional parent provider name to inherit fields from
@@ -19,7 +19,7 @@ function M.plugin_root()
   if source:sub(1, 1) == "@" then
     source = source:sub(2)
   end
-  -- <root>/lua/agentbridge/config.lua -> <root>
+  -- <root>/lua/rex_agent/config.lua -> <root>
   return vim.fn.fnamemodify(source, ":p:h:h:h")
 end
 
@@ -149,8 +149,8 @@ M.defaults = {
 }
 
 ---Resolve `extends` inheritance on provider configs.
----@param providers table<string, AgentBridgeProvider>
----@return table<string, AgentBridgeProvider>
+---@param providers table<string, RexAgentProvider>
+---@return table<string, RexAgentProvider>
 local function resolve_providers(providers)
   local resolved = {}
 
@@ -164,7 +164,7 @@ local function resolve_providers(providers)
     end
     seen = seen or {}
     if seen[name] then
-      error("agentbridge: cyclic provider inheritance involving '" .. name .. "'")
+      error("rex-agent: cyclic provider inheritance involving '" .. name .. "'")
     end
     seen[name] = true
 
@@ -172,7 +172,7 @@ local function resolve_providers(providers)
     if raw.extends then
       local parent = resolve_one(raw.extends, seen)
       if not parent then
-        error("agentbridge: provider '" .. name .. "' extends unknown provider '" .. raw.extends .. "'")
+        error("rex-agent: provider '" .. name .. "' extends unknown provider '" .. raw.extends .. "'")
       end
       result = vim.tbl_deep_extend("force", vim.deepcopy(parent), result)
       result.extends = nil

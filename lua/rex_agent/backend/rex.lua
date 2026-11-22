@@ -192,7 +192,7 @@ end
 
 ---@param provider_name string
 ---@param cfg table
----@param provider_cfg? AgentBridgeProvider
+---@param provider_cfg? RexAgentProvider
 ---@return boolean
 function M.is_alive(provider_name, cfg, provider_cfg)
   local s = sessions[provider_name]
@@ -245,7 +245,7 @@ end
 
 ---Open (or focus if already alive) a Rex split pane for a provider.
 ---@param provider_name string
----@param provider_cfg AgentBridgeProvider
+---@param provider_cfg RexAgentProvider
 ---@param argv_cmd string[] Full command argv to run in the pane
 ---@param env table<string, string> Environment variables to inject via `env`
 ---@param cwd string Working directory for the new pane

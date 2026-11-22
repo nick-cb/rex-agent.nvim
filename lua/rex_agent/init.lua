@@ -1,9 +1,9 @@
----@module 'agentbridge'
+---@module 'rex_agent'
 ---Multi-provider Neovim bridge for TUI coding agents (Antigravity `agy`, Claude Code, etc.)
 ---with Rex pane automation and passive live cursor/file/selection tracking via hooks.
-local config_mod = require("agentbridge.config")
-local extract = require("agentbridge.extract")
-local state_mod = require("agentbridge.state")
+local config_mod = require("rex_agent.config")
+local extract = require("rex_agent.extract")
+local state_mod = require("rex_agent.state")
 
 local M = {}
 
@@ -20,15 +20,15 @@ M.state = {
 local function get_backend()
   local mode = M.state.config.backend or "auto"
   if mode == "rex" then
-    return require("agentbridge.backend.rex")
+    return require("rex_agent.backend.rex")
   elseif mode == "nvim" then
-    return require("agentbridge.backend.nvim")
+    return require("rex_agent.backend.nvim")
   end
-  local rex = require("agentbridge.backend.rex")
+  local rex = require("rex_agent.backend.rex")
   if rex.is_available() then
     return rex
   end
-  return require("agentbridge.backend.nvim")
+  return require("rex_agent.backend.nvim")
 end
 
 ---@return string
@@ -89,7 +89,7 @@ local function ensure_claude_settings_file()
 
   local base = uv.os_tmpdir() or "/tmp"
   local user = (vim.env.USER or "user"):gsub("[^A-Za-z0-9_.-]+", "_")
-  local path = string.format("%s/nvim-agentbridge-claude-hooks-%s.json", base, user)
+  local path = string.format("%s/nvim-rex-agent-claude-hooks-%s.json", base, user)
   local tmp = path .. ".tmp." .. tostring(uv.hrtime())
   local fd = uv.fs_open(tmp, "w", tonumber("600", 8))
   if not fd then
@@ -110,18 +110,18 @@ end
 
 ---@param provider_name? string
 ---@return string name
----@return AgentBridgeProvider|nil cfg
+---@return RexAgentProvider|nil cfg
 local function resolve_provider(provider_name)
   local name = (provider_name and provider_name ~= "" and provider_name) or M.state.active_provider
   local pcfg = M.state.config.providers[name]
   if not pcfg then
-    vim.notify("agentbridge: unknown provider '" .. tostring(name) .. "'", vim.log.levels.ERROR)
+    vim.notify("rex-agent: unknown provider '" .. tostring(name) .. "'", vim.log.levels.ERROR)
     return name, nil
   end
   return name, pcfg
 end
 
----@param provider_cfg AgentBridgeProvider
+---@param provider_cfg RexAgentProvider
 ---@param extra_args? string[]
 ---@return string[] argv
 ---@return table<string, string> env
@@ -156,11 +156,11 @@ end
 ---@return boolean
 function M.set_provider(name)
   if not M.state.config.providers[name] then
-    vim.notify("agentbridge: unknown provider '" .. tostring(name) .. "'", vim.log.levels.ERROR)
+    vim.notify("rex-agent: unknown provider '" .. tostring(name) .. "'", vim.log.levels.ERROR)
     return false
   end
   M.state.active_provider = name
-  vim.notify("agentbridge: active provider -> " .. (M.state.config.providers[name].label or name), vim.log.levels.INFO)
+  vim.notify("rex-agent: active provider -> " .. (M.state.config.providers[name].label or name), vim.log.levels.INFO)
   return true
 end
 
@@ -268,7 +268,7 @@ function M.pick_provider(opts)
         backend.bind(choice.provider, choice.block_id, choice.label, choice.session)
       end
       vim.notify(
-        string.format("agentbridge: active -> %s (%s)", choice.label, short_id(choice.block_id)),
+        string.format("rex-agent: active -> %s (%s)", choice.label, short_id(choice.block_id)),
         vim.log.levels.INFO
       )
       if opts.focus then
@@ -315,7 +315,7 @@ function M.open(provider_name, extra_args, opts)
 
   local ok, spawned, err = backend.open(name, pcfg, argv, env, cwd, M.state.config, open_opts)
   if not ok then
-    vim.notify("agentbridge: " .. (err or "failed to open pane"), vim.log.levels.ERROR)
+    vim.notify("rex-agent: " .. (err or "failed to open pane"), vim.log.levels.ERROR)
     return false, false
   end
   return true, spawned
@@ -332,7 +332,7 @@ function M.focus(provider_name)
   if backend.is_alive(name, M.state.config, pcfg) then
     local ok, err = backend.focus(name, M.state.config)
     if not ok then
-      vim.notify("agentbridge: " .. (err or "failed to focus pane"), vim.log.levels.WARN)
+      vim.notify("rex-agent: " .. (err or "failed to focus pane"), vim.log.levels.WARN)
     end
     return ok
   end
@@ -366,7 +366,7 @@ function M.select_model(provider_name)
   end
   local models = pcfg.models or {}
   if #models == 0 then
-    vim.notify("agentbridge: no models configured for '" .. name .. "'", vim.log.levels.WARN)
+    vim.notify("rex-agent: no models configured for '" .. name .. "'", vim.log.levels.WARN)
     return
   end
   vim.ui.select(models, {
@@ -404,7 +404,7 @@ function M.send_text(text, opts)
       focus = opts.focus,
     })
     if not ok then
-      vim.notify("agentbridge: " .. (err or "failed to send text"), vim.log.levels.ERROR)
+      vim.notify("rex-agent: " .. (err or "failed to send text"), vim.log.levels.ERROR)
     end
     return ok
   end
@@ -444,7 +444,7 @@ function M.send_file(path, start_line, end_line, opts)
   if not target_path or target_path == "" then
     local resolved, err = extract.current_file(cwd)
     if not resolved then
-      vim.notify("agentbridge: " .. err, vim.log.levels.WARN)
+      vim.notify("rex-agent: " .. err, vim.log.levels.WARN)
       return false
     end
     target_path = resolved
@@ -467,7 +467,7 @@ function M.send_visual(line1, line2, opts)
   local cwd = resolve_cwd()
   local sel, err = extract.visual_selection(line1, line2, cwd)
   if not sel then
-    vim.notify("agentbridge: " .. err, vim.log.levels.WARN)
+    vim.notify("rex-agent: " .. err, vim.log.levels.WARN)
     return false
   end
 
@@ -492,7 +492,7 @@ function M.send_tree(line1, line2, opts)
   local cwd = resolve_cwd()
   local files, err = extract.tree_files(line1, line2, cwd)
   if not files or #files == 0 then
-    vim.notify("agentbridge: " .. (err or "no files selected"), vim.log.levels.WARN)
+    vim.notify("rex-agent: " .. (err or "no files selected"), vim.log.levels.WARN)
     return false
   end
 
@@ -623,15 +623,15 @@ local function create_commands()
   end, { nargs = "+", bang = true, desc = "Send raw text to active agent (! = insert without submitting)" })
 
   vim.api.nvim_create_user_command("AgentStatus", function()
-    local backend_name = (get_backend() == require("agentbridge.backend.rex")) and "rex" or "nvim"
+    local backend_name = (get_backend() == require("rex_agent.backend.rex")) and "rex" or "nvim"
     local msg = string.format(
-      "agentbridge: provider=%s backend=%s state_file=%s",
+      "rex-agent: provider=%s backend=%s state_file=%s",
       M.state.active_provider,
       backend_name,
       M.state.config.state.enabled and state_mod.path() or "disabled"
     )
     vim.notify(msg, vim.log.levels.INFO)
-  end, { desc = "Show agentbridge status" })
+  end, { desc = "Show rex-agent status" })
 
   vim.api.nvim_create_user_command("AgentHookConfig", function()
     print(M.agy_hooks_json())
