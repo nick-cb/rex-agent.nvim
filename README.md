@@ -8,9 +8,9 @@ Lightweight, multi-provider Neovim bridge for TUI coding agents (**Antigravity `
    - Inside Rex (`$REX_BLOCK`), tracks each provider's Rex `block_id` via `rex split --json` and injects mentions/snippets via `rex send` (over stdin, bracketed-paste safe for multiline text).
    - Outside Rex, falls back to a native Neovim vertical split + `vim.fn.chansend`.
 2. **Passive live editor context** (active buffer, cursor line/col, visual selection):
-   - Debounced Neovim autocmds atomically write `/tmp/nvim-agentbridge-<pid>.json` and pass its path as `NVIM_EDITOR_STATE` to every spawned agent pane.
+   - Debounced Neovim autocmds atomically write a state JSON file (keyed by `$REX_BLOCK` inside Rex so restarting Neovim automatically resumes live tracking for already-open agent panes, or by PID outside Rex) and pass its path as `NVIM_EDITOR_STATE` to every spawned agent pane.
    - **Antigravity (`agy`)** reads it via a global `PreInvocation` hook in `~/.gemini/config/hooks.json` (deduplicated per `conversationId` so it only injects when your file/cursor/selection changes).
-   - **Claude Code (`claude` & `claude2`)** automatically receives a temporary `--settings` file at launch registering the same script as a `UserPromptSubmit` hook (works across multiple `CLAUDE_CONFIG_DIR` accounts without duplicating settings).
+   - **Claude Code (`claude` & `claude2`)** automatically receives a stable `--settings` file at launch registering the same script as a `UserPromptSubmit` hook (works across multiple `CLAUDE_CONFIG_DIR` accounts without duplicating settings).
 
 ## 1. Register the Antigravity Global Hook
 

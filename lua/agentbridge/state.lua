@@ -251,11 +251,24 @@ local function schedule_flush()
   )
 end
 
+---@param value string
+---@return string
+local function sanitize_key(value)
+  return value:gsub("[^A-Za-z0-9_.-]+", "_")
+end
+
 ---@return string
 function M.path()
   if not internal.state_path then
     local base = uv.os_tmpdir() or "/tmp"
-    internal.state_path = string.format("%s/nvim-agentbridge-%d.json", base, vim.fn.getpid())
+    local rex_block = vim.env.REX_BLOCK
+    if rex_block and rex_block ~= "" then
+      -- Key by $REX_BLOCK inside Rex so restarting Neovim in the same pane
+      -- writes to the exact same state path already held by open agent panes.
+      internal.state_path = string.format("%s/nvim-agentbridge-rex-%s.json", base, sanitize_key(rex_block))
+    else
+      internal.state_path = string.format("%s/nvim-agentbridge-%d.json", base, vim.fn.getpid())
+    end
   end
   return internal.state_path
 end
@@ -332,6 +345,16 @@ function M.cleanup()
     internal.timer = nil
   end
   if internal.state_path then
+    -- Only remove the state file if it still belongs to this Neovim PID
+    -- (prevents a slow-exiting Neovim from deleting a restarted Neovim's state).
+    local my_pid = vim.fn.getpid()
+    local ok, lines = pcall(vim.fn.readfile, internal.state_path)
+    if ok and lines and #lines > 0 then
+      local ok_j, decoded = pcall(vim.json.decode, table.concat(lines, "\n"))
+      if ok_j and type(decoded) == "table" and decoded.pid and decoded.pid ~= my_pid then
+        return
+      end
+    end
     pcall(uv.fs_unlink, internal.state_path)
   end
 end

@@ -55,8 +55,9 @@ local function resolve_cwd()
   return vim.fn.getcwd()
 end
 
----Create (once per Neovim PID) a temporary Claude Code settings JSON file
----that registers our UserPromptSubmit hook for any Claude account/config dir.
+---Create (or refresh) a stable Claude Code settings JSON file that registers
+---our UserPromptSubmit hook for any Claude account/config dir. Kept stable
+---across Neovim restarts so already-open Claude panes keep working.
 ---@return string|nil
 local function ensure_claude_settings_file()
   if M.state.claude_settings_path and vim.fn.filereadable(M.state.claude_settings_path) == 1 then
@@ -87,15 +88,24 @@ local function ensure_claude_settings_file()
   })
 
   local base = uv.os_tmpdir() or "/tmp"
-  local path = string.format("%s/nvim-agentbridge-claude-hooks-%d.json", base, vim.fn.getpid())
-  local fd = uv.fs_open(path, "w", tonumber("600", 8))
+  local user = (vim.env.USER or "user"):gsub("[^A-Za-z0-9_.-]+", "_")
+  local path = string.format("%s/nvim-agentbridge-claude-hooks-%s.json", base, user)
+  local tmp = path .. ".tmp." .. tostring(uv.hrtime())
+  local fd = uv.fs_open(tmp, "w", tonumber("600", 8))
   if not fd then
     return nil
   end
-  uv.fs_write(fd, payload, 0)
-  uv.fs_close(fd)
-  M.state.claude_settings_path = path
-  return path
+  local ok = pcall(function()
+    uv.fs_write(fd, payload, 0)
+  end)
+  pcall(uv.fs_close, fd)
+  if ok then
+    pcall(uv.fs_rename, tmp, path)
+    M.state.claude_settings_path = path
+    return path
+  end
+  pcall(uv.fs_unlink, tmp)
+  return nil
 end
 
 ---@param provider_name? string
@@ -525,15 +535,6 @@ function M.setup(user_opts)
   end
 
   create_commands()
-
-  vim.api.nvim_create_autocmd("VimLeavePre", {
-    group = vim.api.nvim_create_augroup("AgentBridgeCleanup", { clear = true }),
-    callback = function()
-      if M.state.claude_settings_path then
-        pcall(uv.fs_unlink, M.state.claude_settings_path)
-      end
-    end,
-  })
 
   M.state.initialized = true
   return M
