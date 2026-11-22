@@ -164,21 +164,131 @@ function M.set_provider(name)
   return true
 end
 
-function M.pick_provider()
-  local names = vim.tbl_keys(M.state.config.providers)
+---@param id string|nil
+---@return string
+local function short_id(id)
+  if not id or id == "" then
+    return ""
+  end
+  local tail = id:match("([^:]+)$") or id
+  if #tail > 8 then
+    return tail:sub(1, 8)
+  end
+  return tail
+end
+
+---Open a picker showing all currently open CLI panes first (with live status
+---and active marker), followed by unopened configured providers.
+---@param opts? { focus?: boolean }
+function M.pick_provider(opts)
+  opts = opts or {}
+  local backend = get_backend()
+  local cfg = M.state.config
+  local open_entries = (backend.list_open and backend.list_open(cfg)) or {}
+  local tracked = (backend.get_sessions and backend.get_sessions()) or {}
+
+  local items = {}
+  local open_provider_counts = {}
+  local has_open_provider = {}
+
+  for _, entry in ipairs(open_entries) do
+    if entry.provider then
+      open_provider_counts[entry.provider] = (open_provider_counts[entry.provider] or 0) + 1
+      has_open_provider[entry.provider] = true
+    end
+  end
+
+  -- 1. Open provider panes first
+  for _, entry in ipairs(open_entries) do
+    if entry.provider then
+      local active_sess = tracked[entry.provider]
+      local is_selected_block = (entry.provider == M.state.active_provider)
+        and (not active_sess or not active_sess.block_id or active_sess.block_id == entry.block_id)
+      local dup_suffix = (open_provider_counts[entry.provider] > 1)
+          and (" (" .. short_id(entry.block_id) .. ")")
+        or ""
+      local active_tag = is_selected_block and "  [active]" or ""
+      table.insert(items, {
+        kind = "open_provider",
+        provider = entry.provider,
+        block_id = entry.block_id,
+        session = entry.session,
+        label = entry.label,
+        display = string.format("● %s [%s]%s%s", entry.label, entry.provider, dup_suffix, active_tag),
+      })
+    end
+  end
+
+  -- 2. Other open panes in the same Rex window (e.g. manually launched CLI in a "shell" pane)
+  for _, entry in ipairs(open_entries) do
+    if not entry.provider then
+      local active_sess = tracked[M.state.active_provider]
+      local is_bound = active_sess and active_sess.block_id == entry.block_id
+      local active_tag = is_bound and "  [active]" or ""
+      table.insert(items, {
+        kind = "open_other",
+        provider = M.state.active_provider,
+        block_id = entry.block_id,
+        session = entry.session,
+        label = entry.label,
+        display = string.format("● %s (pane %s)%s", entry.label, short_id(entry.block_id), active_tag),
+      })
+    end
+  end
+
+  -- 3. Configured providers that are not currently open
+  local names = vim.tbl_keys(cfg.providers)
   table.sort(names)
-  vim.ui.select(names, {
-    prompt = "Select AI provider:",
-    format_item = function(name)
-      local p = M.state.config.providers[name]
-      local active_mark = (name == M.state.active_provider) and " (active)" or ""
-      return string.format("%s [%s]%s", p.label or name, name, active_mark)
+  for _, name in ipairs(names) do
+    if not has_open_provider[name] then
+      local p = cfg.providers[name]
+      local active_tag = (name == M.state.active_provider) and "  [active]" or ""
+      table.insert(items, {
+        kind = "closed_provider",
+        provider = name,
+        label = p.label or name,
+        display = string.format("○ %s [%s] (not open)%s", p.label or name, name, active_tag),
+      })
+    end
+  end
+
+  vim.ui.select(items, {
+    prompt = "Select AI CLI pane (● open, ○ not open):",
+    format_item = function(item)
+      return item.display
     end,
   }, function(choice)
-    if choice then
-      M.set_provider(choice)
+    if not choice then
+      return
+    end
+
+    if choice.kind == "open_provider" or choice.kind == "open_other" then
+      M.state.active_provider = choice.provider
+      if backend.bind and choice.block_id then
+        backend.bind(choice.provider, choice.block_id, choice.label, choice.session)
+      end
+      vim.notify(
+        string.format("agentbridge: active -> %s (%s)", choice.label, short_id(choice.block_id)),
+        vim.log.levels.INFO
+      )
+      if opts.focus then
+        M.focus(choice.provider)
+      end
+    else
+      M.set_provider(choice.provider)
+      if opts.focus then
+        M.open(choice.provider)
+      end
     end
   end)
+end
+
+---Short label suitable for a statusline (e.g. lualine).
+---@return string
+function M.statusline()
+  local name = M.state.active_provider
+  local p = M.state.config.providers[name]
+  return (p and p.label) or name
 end
 
 ---Open or focus a provider pane, making it the active provider.
@@ -447,15 +557,19 @@ local function create_commands()
   vim.api.nvim_create_user_command("AgentSwitch", function(opts)
     if opts.args ~= "" then
       M.set_provider(opts.args)
+      if opts.bang then
+        M.focus(opts.args)
+      end
     else
-      M.pick_provider()
+      M.pick_provider({ focus = opts.bang })
     end
   end, {
     nargs = "?",
+    bang = true,
     complete = function()
       return vim.tbl_keys(M.state.config.providers)
     end,
-    desc = "Switch the active AI provider",
+    desc = "Pick/switch active AI CLI pane (! to also focus it)",
   })
 
   vim.api.nvim_create_user_command("AgentResume", function(opts)

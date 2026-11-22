@@ -68,27 +68,26 @@ function M.block_exists(cfg, session, block_id)
   return res.code == 0
 end
 
----Find an existing placed block in Neovim's current Rex window matching `label`.
 ---@param cfg table
----@param label string
----@return string|nil block_id
+---@return table[]|nil blocks
+---@return string|nil my_window
 ---@return string|nil session
-local function discover_block_in_window(cfg, label)
+local function list_session_blocks(cfg)
   local session = vim.env.REX_SESSION
   local my_block = vim.env.REX_BLOCK
-  if not session or session == "" or not my_block or my_block == "" or not label or label == "" then
-    return nil, nil
+  if not session or session == "" or not my_block or my_block == "" then
+    return nil, nil, nil
   end
 
   local bin = (cfg.rex and cfg.rex.bin) or "rex"
   local res = vim.system({ bin, "block", "ls", "-s", session, "--json" }, { text = true }):wait()
   if res.code ~= 0 or not res.stdout or res.stdout == "" then
-    return nil, nil
+    return nil, nil, nil
   end
 
   local ok, decoded = pcall(vim.json.decode, res.stdout)
   if not ok or type(decoded) ~= "table" or type(decoded.blocks) ~= "table" then
-    return nil, nil
+    return nil, nil, nil
   end
 
   local my_window = nil
@@ -98,11 +97,26 @@ local function discover_block_in_window(cfg, label)
       break
     end
   end
-  if not my_window then
+
+  return decoded.blocks, my_window, session
+end
+
+---Find an existing placed block in Neovim's current Rex window matching `label`.
+---@param cfg table
+---@param label string
+---@return string|nil block_id
+---@return string|nil session
+local function discover_block_in_window(cfg, label)
+  if not label or label == "" then
+    return nil, nil
+  end
+  local blocks, my_window, session = list_session_blocks(cfg)
+  if not blocks or not my_window then
     return nil, nil
   end
 
-  for _, blk in ipairs(decoded.blocks) do
+  local my_block = vim.env.REX_BLOCK
+  for _, blk in ipairs(blocks) do
     if
       blk.block_id ~= my_block
       and blk.window_id == my_window
@@ -114,6 +128,66 @@ local function discover_block_in_window(cfg, label)
   end
 
   return nil, nil
+end
+
+---List all open Rex blocks in Neovim's current window (excluding Neovim itself),
+---matched to configured providers when labels match.
+---@param cfg table
+---@return { provider: string|nil, label: string, block_id: string, session: string, is_tracked: boolean }[]
+function M.list_open(cfg)
+  local blocks, my_window, session = list_session_blocks(cfg)
+  if not blocks or not my_window then
+    return {}
+  end
+
+  -- Map provider labels -> provider names
+  local label_to_provider = {}
+  for name, pcfg in pairs(cfg.providers or {}) do
+    local lbl = pcfg.label or name
+    label_to_provider[lbl] = name
+  end
+
+  -- Map tracked block_ids -> provider names
+  local tracked_by_block = {}
+  for pname, s in pairs(sessions) do
+    if s and s.block_id then
+      tracked_by_block[s.block_id] = pname
+    end
+  end
+
+  local my_block = vim.env.REX_BLOCK
+  local results = {}
+  for _, blk in ipairs(blocks) do
+    if
+      blk.block_id ~= my_block
+      and blk.window_id == my_window
+      and (blk.placement == nil or blk.placement == "placed")
+    then
+      local pname = tracked_by_block[blk.block_id] or label_to_provider[blk.label or ""]
+      table.insert(results, {
+        provider = pname,
+        label = blk.label or blk.block_id,
+        block_id = blk.block_id,
+        session = session or "",
+        is_tracked = tracked_by_block[blk.block_id] ~= nil,
+      })
+    end
+  end
+
+  return results
+end
+
+---Bind a provider (or custom target) to a specific open Rex block_id.
+---@param provider_name string
+---@param block_id string
+---@param label? string
+---@param session? string
+function M.bind(provider_name, block_id, label, session)
+  sessions[provider_name] = {
+    block_id = block_id,
+    session = session or vim.env.REX_SESSION or "",
+    label = label or provider_name,
+  }
 end
 
 ---@param provider_name string

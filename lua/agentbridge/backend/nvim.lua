@@ -168,6 +168,27 @@ function M.forget(provider_name)
   sessions[provider_name] = nil
 end
 
+---@param cfg table
+---@return { provider: string, label: string, block_id: string, is_tracked: boolean }[]
+function M.list_open(cfg)
+  local results = {}
+  for name, s in pairs(sessions) do
+    if M.is_alive(name) then
+      local pcfg = cfg.providers and cfg.providers[name]
+      table.insert(results, {
+        provider = name,
+        label = (pcfg and pcfg.label) or name,
+        block_id = "buf:" .. tostring(s.bufnr),
+        is_tracked = true,
+      })
+    end
+  end
+  table.sort(results, function(a, b)
+    return a.provider < b.provider
+  end)
+  return results
+end
+
 ---@return table
 function M.get_sessions()
   return vim.deepcopy(sessions)
